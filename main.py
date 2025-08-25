@@ -1,24 +1,14 @@
 import requests
-from fastapi import FastAPI, BackgroundTasks, HTTPException, Response
+from fastapi import FastAPI, Response
 from pydantic import BaseModel
-from extract import ShopifyLogin
-import os
 import json
 import traceback
 
-# Initialize ShopifyLogin with error handling
-shopify = None
-try:
-    shopify = ShopifyLogin(headless=False)
-    print("ShopifyLogin initialized successfully")
-except Exception as e:
-    print(f"Warning: Failed to initialize ShopifyLogin on startup: {str(e)}")
-    print("Will attempt to initialize on first request")
+STORE_URL = "https://keydirect.ca"  # Replace with actual store URL
 
-cart = ""
+session = requests.Session()
 cookies = {}
 
-#
 app = FastAPI()
 
 class Account(BaseModel):
@@ -33,113 +23,64 @@ class Product(BaseModel):
 async def root():
     return {"message": "Hello World. Welcome to FastAPI!"}
 
-@app.get("/updateCookie")
-async def updateCookie():
-    global cart, cookies, shopify
+@app.post("/login")
+async def login(account: Account):
+    global cookies, session
 
-    cookie_str = ""
-    for cookie in shopify.get_cookies():
-        cookie_str += f"{cookie['name']}={cookie['value']}; "
-
-    if not cart:
-        return {"status": "fail", "msg": "No cookie stored. Plz login first."}
-
-    url = "https://www.uhs-hardware.com/cart/update.js"
-    headers = {
-        "X-Requested-With": "XMLHttpRequest",
-        "Cookie": cookie_str
-    }
-    data = {"note": ""}
+    cookies = {}
 
     try:
-        response = requests.post(url, headers=headers, data=data)
+        data = {
+            'username': account.email,
+            'password': account.password,
+            'rememberme': 'forever',
+            'woocommerce-login-nonce': '05786d7154',
+            '_wp_http_referer': '/my-account/',
+            'login': '/my-account/',
+            'redirect': 'https://keydirect.ca/'
+        }
 
-        for cookie in response.cookies:
-            cookies[cookie.name] = cookie.value
+        session.post(f"{STORE_URL}/my-account/", data=data)
 
-        return Response(content=json.dumps({"status": "success", "cookie": cart, "cookies": cookies}), media_type="application/json")
-    
-    except Exception as e:
-        return Response(content=json.dumps({"status": "fail", "msg": str(e)}), media_type="application/json")
+        for cookie in session.cookies.items():
+            cookies[cookie[0]] = cookie[1]
 
-@app.post("/getCookie")
-async def getCookie(account: Account):
-    global cart, cookies, shopify
-
-    # Try to initialize ShopifyLogin if not already done
-    if shopify is None:
-        try:
-            shopify = ShopifyLogin(headless=False)
-            print("ShopifyLogin initialized on demand")
-        except Exception as e:
-            error_msg = f"Failed to initialize WebDriver: {str(e)}"
-            print(error_msg)
-            traceback.print_exc()
-            return Response(
-                content=json.dumps({"status": "fail", "msg": error_msg}), 
-                media_type="application/json"
-            )
-
-    STORE_URL = "https://www.uhs-hardware.com"  # Replace with actual store URL
-
-    try:
-        if shopify.login(STORE_URL, account.email, account.password):
-            for cookie in shopify.get_cookies():
-                cookies[cookie["name"]] = cookie["value"]
-                if cookie["name"] == "cart":
-                    cart = cookie["value"]
-
-            cookie_str = ""
-            for cookie in shopify.get_cookies():
-                cookie_str += f"{cookie['name']}={cookie['value']}; "
-
-            print(cookie_str)
-
-            return Response(content=json.dumps({"status": "success", "cookie": cart, "cookies": cookies}), media_type="application/json")
-        else:
-            return Response(content=json.dumps({"status": "fail", "msg": "Login failed"}), media_type="application/json")
+        return Response(content=json.dumps({"status": "success", "cookies": cookies}), media_type="application/json")
     except Exception as e:
         error_msg = f"Login error: {str(e)}"
         print(error_msg)
         traceback.print_exc()
         return Response(content=json.dumps({"status": "fail", "msg": error_msg}), media_type="application/json")
 
+
 @app.post("/addProduct")
 async def addProduct(product: Product):
-    global shopify
-    
-    # Check if ShopifyLogin is initialized
-    if shopify is None:
-        return Response(
-            content=json.dumps({"status": "fail", "msg": "ShopifyLogin not initialized. Please login first."}),
-            media_type="application/json"
-        )
-    
+    global cookies, session
+
     try:
+        # Find product id
+        response = session.get(product.url)
+
+        start = response.text.find("name=\"add-to-cart\" value=\"")
+        end = response.text.find("\" class=", start)
+        id = int(response.text[start+26:end])
+
         # Add product to cart
-        if shopify.add_products(product.url, product.quantity):
-            # Get updated cookies
-            updated_cookies = {}
-            updated_cart = ""
-            for cookie in shopify.get_cookies():
-                updated_cookies[cookie["name"]] = cookie["value"]
-                if cookie["name"] == "cart":
-                    updated_cart = cookie["value"]
-            
-            return Response(
-                content=json.dumps({
-                    "status": "success", 
-                    "msg": f"Product added to cart with quantity {product.quantity}",
-                    "cart": updated_cart,
-                    "cookies": updated_cookies
-                }),
-                media_type="application/json"
-            )
-        else:
-            return Response(
-                content=json.dumps({"status": "fail", "msg": "Failed to add product"}),
-                media_type="application/json"
-            )
+        data = {
+            'tm-epo-counter': 1,
+            'tcaddtocart': id,
+            'thwepof_product_fields': '',
+            'quantity': product.quantity,
+            'add-to-cart': id,
+            'action': 'xoo_wsc_add_to_cart',
+        }
+
+        session.post(f"{STORE_URL}/?wc-ajax=xoo_wsc_add_to_cart/", data=data)
+
+        for cookie in session.cookies.items():
+            cookies[cookie[0]] = cookie[1]
+
+        return Response(content=json.dumps({"status": "success", "cookies": cookies}), media_type="application/json")
         
     except Exception as e:
         error_msg = f"Failed to add product: {str(e)}"
