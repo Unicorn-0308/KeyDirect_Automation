@@ -30,17 +30,29 @@ async def login(account: Account):
     cookies = {}
 
     try:
+        session.close()
+        session = requests.Session()
+
+        # Find nonce
+        response = session.get(f"{STORE_URL}/my-account/")
+
+        start = response.text.find("name=\"woocommerce-login-nonce\" value=\"")
+        end = response.text.find("\" />", start)
+        nonce = response.text[start+38:end]
+
         data = {
             'username': account.email,
             'password': account.password,
             'rememberme': 'forever',
-            'woocommerce-login-nonce': '05786d7154',
+            'woocommerce-login-nonce': nonce,
             '_wp_http_referer': '/my-account/',
-            'login': '/my-account/',
+            'login': 'Log in',
             'redirect': 'https://keydirect.ca/'
         }
+        print(data)
 
-        session.post(f"{STORE_URL}/my-account/", data=data)
+        response = session.post(f"{STORE_URL}/my-account/", data=data)
+
 
         for cookie in session.cookies.items():
             cookies[cookie[0]] = cookie[1]
