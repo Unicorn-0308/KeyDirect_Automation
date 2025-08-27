@@ -1,0 +1,120 @@
+{
+  "name": "KeyDirect",
+  "nodes": [
+    {
+      "parameters": {
+        "inputSource": "jsonExample",
+        "jsonExample": "{\n  \"productUrl\": \"https://keydirect.ca/product/lonsdor-fp30-toyota-cable-for-all-keys-lost-via-obd-8a-ba-and-4a-models-without-pin-code-for-the-k518/\",\n  \"qty\": 100\n}"
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        1184,
+        -112
+      ],
+      "id": "10f68866-81e2-4e34-9895-d30b96619fa8",
+      "name": "When Executed by Another Workflow "
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://selenium.autokey.ca:8000/login",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "email",
+              "value": "info@autokey.ca"
+            },
+            {
+              "name": "password",
+              "value": "AutoKeyKD!!"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1408,
+        -112
+      ],
+      "id": "468190d1-61a0-4313-959d-8f3f92b3f4df",
+      "name": "Login"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://selenium.autokey.ca:8000/addProduct",
+        "sendBody": true,
+        "bodyParameters": {
+          "parameters": [
+            {
+              "name": "url",
+              "value": "={{ $('When Executed by Another Workflow ').item.json.productUrl }}"
+            },
+            {
+              "name": "quantity",
+              "value": "={{ $('When Executed by Another Workflow ').item.json.qty }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1616,
+        -112
+      ],
+      "id": "b4cb9950-7832-449c-bab6-6e48c7410189",
+      "name": "Add Products"
+    }
+  ],
+  "pinData": {
+    "When Executed by Another Workflow ": [
+      {
+        "json": {
+          "productUrl": "https://keydirect.ca/product/lonsdor-fp30-toyota-cable-for-all-keys-lost-via-obd-8a-ba-and-4a-models-without-pin-code-for-the-k518/",
+          "qty": 100
+        }
+      }
+    ]
+  },
+  "connections": {
+    "When Executed by Another Workflow ": {
+      "main": [
+        [
+          {
+            "node": "Login",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Login": {
+      "main": [
+        [
+          {
+            "node": "Add Products",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "724ff10f-4d34-4682-97ab-b0effbc38929",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "42afb0ac4318cb3c53df5050165d43b5c05e084e920b8bb9498ea51165134f16"
+  },
+  "id": "i9fLFJY2sRwlAVFW",
+  "tags": []
+}
